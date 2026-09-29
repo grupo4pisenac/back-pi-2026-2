@@ -5,15 +5,20 @@ from sqlalchemy.orm import Session
 from app.core.database import Base, engine, get_db
 from app.models.climate import ClimateData
 from app.schemas.climate import ClimateDataResponse
+from app.routers import ingestion
+
 
 # Cria as tabelas no PostgreSQL ao subir a aplicação
 Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(
     title="Dashboard Climático e Logístico API",
     description="API para ingestão e monitoramento de dados de exportação de frutas",
     version="1.0.0"
 )
+
+app.include_router(ingestion.router)
 
 @app.get("/")
 def read_root():
