@@ -1,7 +1,9 @@
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
-from app.services.thingspeak import fetch_feeds, parse_feed
+from app.core.database import get_db
+from app.services.thingspeak import fetch_feeds, parse_feed, save_new
 
 router = APIRouter(prefix="/api/ingestion", tags=["ingestion"])
 
@@ -34,3 +36,20 @@ def preview_clean_feeds(results: int = Query(10, ge=1, le=100)):
             valid.append(record)
 
     return {"fetched": len(feeds), "valid": valid, "discarded": discarded}
+
+
+@router.post("/run")
+def run_ingestion(results: int = Query(100, ge=1, le=100), db: Session = Depends(get_db)):
+    feeds = _fetch_or_raise(results)
+
+    records = []
+    discarded = 0
+    for feed in feeds:
+        record = parse_feed(feed)
+        if record is None:
+            discarded += 1
+        else:
+            records.append(record)
+
+    saved, duplicates = save_new(db, records)
+    return {"fetched": len(feeds), "saved": saved, "duplicates": duplicates, "discarded": discarded}

@@ -2,10 +2,13 @@ import os
 
 import httpx
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.schemas.climate import ClimateDataCreate
+from app.models.climate import ClimateData
 
 load_dotenv()
 
@@ -52,3 +55,28 @@ def parse_feed(feed: dict) -> Optional[ClimateDataCreate]:
         humidity=humidity,
         recorded_at=recorded_at,
     )
+
+
+def save_new(db: Session, records: list[ClimateDataCreate]) -> tuple[int, int]:
+    if not records:
+        return 0, 0
+
+    ids = [record.entry_id for record in records]
+    existing = set(
+        db.scalars(select(ClimateData.entry_id).where(ClimateData.entry_id.in_(ids)))
+    )
+
+    new_rows = [
+        ClimateData(
+            entry_id=record.entry_id,
+            temperature=record.temperature,
+            humidity=record.humidity,
+            recorded_at=record.recorded_at.astimezone(timezone.utc).replace(tzinfo=None),
+        )
+        for record in records
+        if record.entry_id not in existing
+    ]
+
+    db.add_all(new_rows)
+    db.commit()
+    return len(new_rows), len(records) - len(new_rows)
