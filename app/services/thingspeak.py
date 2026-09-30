@@ -80,3 +80,17 @@ def save_new(db: Session, records: list[ClimateDataCreate]) -> tuple[int, int]:
     db.add_all(new_rows)
     db.commit()
     return len(new_rows), len(records) - len(new_rows)
+
+
+def process_feeds(db: Session, feeds: list[dict]) -> dict:
+    records = []
+    discarded = 0
+    for feed in feeds:
+        record = parse_feed(feed)
+        if record is None:
+            discarded += 1
+        else:
+            records.append(record)
+
+    saved, duplicates = save_new(db, records)
+    return {"fetched": len(feeds), "saved": saved, "duplicates": duplicates, "discarded": discarded}
