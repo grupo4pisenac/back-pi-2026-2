@@ -3,7 +3,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import List
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Query
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.database import Base, engine, get_db
@@ -40,9 +42,20 @@ app.include_router(ingestion.router)
 
 @app.get("/")
 def read_root():
-    return {"message": "API online e conectada ao banco de dados."}
+    return {"message": "API online."}
+
+@app.get("/health")
+def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="Banco de dados indisponível")
+    return {"status": "ok", "database": "connected"}
 
 @app.get("/api/climate", response_model=List[ClimateDataResponse])
-def get_climate_records(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+def get_climate_records(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),):
     records = db.query(ClimateData).order_by(ClimateData.recorded_at.desc()).offset(skip).limit(limit).all()
     return records
