@@ -18,10 +18,6 @@ def _fetch_or_raise(results: int) -> list[dict]:
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="Não foi possível acessar o ThingSpeak")
 
-@router.get("/preview")
-def preview_feeds(results: int = Query(10, ge=1, le=100)):
-    return _fetch_or_raise(results)
-
 
 @router.post("/run")
 def run_ingestion(results: int = Query(100, ge=1, le=100), db: Session = Depends(get_db)):
