@@ -22,21 +22,6 @@ def _fetch_or_raise(results: int) -> list[dict]:
 def preview_feeds(results: int = Query(10, ge=1, le=100)):
     return _fetch_or_raise(results)
 
-@router.get("/preview-clean")
-def preview_clean_feeds(results: int = Query(10, ge=1, le=100)):
-    feeds = _fetch_or_raise(results)
-
-    valid = []
-    discarded = 0
-    for feed in feeds:
-        record = parse_feed(feed)
-        if record is None:
-            discarded += 1
-        else:
-            valid.append(record)
-
-    return {"fetched": len(feeds), "valid": valid, "discarded": discarded}
-
 
 @router.post("/run")
 def run_ingestion(results: int = Query(100, ge=1, le=100), db: Session = Depends(get_db)):
