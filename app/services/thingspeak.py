@@ -2,7 +2,7 @@ import os
 
 import httpx
 from dotenv import load_dotenv
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -71,7 +71,7 @@ def save_new(db: Session, records: list[ClimateDataCreate]) -> tuple[int, int]:
             entry_id=record.entry_id,
             temperature=record.temperature,
             humidity=record.humidity,
-            recorded_at=record.recorded_at.astimezone(timezone.utc).replace(tzinfo=None),
+            recorded_at=record.recorded_at,
         )
         for record in records
         if record.entry_id not in existing
