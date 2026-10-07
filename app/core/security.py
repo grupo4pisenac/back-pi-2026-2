@@ -15,5 +15,12 @@ def create_access_token(subject: str, role: str, expires_delta: timedelta | None
     expire = datetime.now(timezone.utc) + (
         expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    to_encode = {"sub": str(subject), "role": role, "exp": expire}
+    to_encode = {"sub": str(subject), "role": role, "exp": expire, "type": "access"}
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+def create_refresh_token(subject: str, role: str, expires_delta: timedelta | None = None) -> str:
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+    )
+    to_encode = {"sub": str(subject), "role": role, "exp": expire, "type": "refresh"}
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
