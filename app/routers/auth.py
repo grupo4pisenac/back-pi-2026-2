@@ -1,30 +1,74 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from app.api.deps import RoleChecker
+from jose import JWTError, jwt
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.deps import RoleChecker, get_current_active_user
+from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import create_access_token, get_password_hash, verify_password
+from app.core.security import create_access_token, create_refresh_token, get_password_hash, verify_password
 from app.models.user import User, UserRole
-from app.schemas.token import Token
+from app.schemas.token import LoginRequest, RefreshTokenRequest, RefreshTokenResponse, TokenResponse
 from app.schemas.user import UserCreate, UserRead
-from app.services.user_service import get_user_by_email
+from app.services.user_service import get_user_by_email, get_user_by_id
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.post("/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = get_user_by_email(db, form_data.username)
-    if not user or not verify_password(form_data.password, user.hashed_password):
+@router.post("/login", response_model=TokenResponse)
+async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
+    user = await get_user_by_email(db, request.email)
+    if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email ou palavra-passe incorretos",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Email ou senha incorretos",
         )
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Utilizador inativo")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuário inativo")
 
     access_token = create_access_token(subject=user.id, role=user.role.value)
-    return Token(access_token=access_token)
+    refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
+    
+    return TokenResponse(
+        accessToken=access_token,
+        refreshToken=refresh_token,
+        user=UserRead.model_validate(user)
+    )
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh(request: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Token de atualização inválido ou expirado",
+    )
+    try:
+        payload = jwt.decode(request.refreshToken, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+        token_type = payload.get("type")
+        if user_id is None or token_type != "refresh":
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = await get_user_by_id(db, uuid.UUID(user_id))
+    if not user or not user.is_active:
+        raise credentials_exception
+
+    access_token = create_access_token(subject=user.id, role=user.role.value)
+    refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
+
+    return RefreshTokenResponse(
+        accessToken=access_token,
+        refreshToken=refresh_token
+    )
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(request: RefreshTokenRequest, current_user: User = Depends(get_current_active_user)):
+    # Apenas confirmamos a rota e o formato da requisição para seguir o contrato.
+    return None
+
+@router.get("/me", response_model=UserRead)
+async def get_me(current_user: User = Depends(get_current_active_user)):
+    return current_user
 
 @router.post(
     "/register",
@@ -32,10 +76,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(RoleChecker([UserRole.ADMIN]))],
 )
-def register(user_in: UserCreate, db: Session = Depends(get_db)):
-    existing_user = get_user_by_email(db, user_in.email)
+async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
+    existing_user = await get_user_by_email(db, user_in.email)
     if existing_user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já registado")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já cadastrado")
 
     user = User(
         email=user_in.email,
@@ -43,6 +87,6 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         role=user_in.role,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
