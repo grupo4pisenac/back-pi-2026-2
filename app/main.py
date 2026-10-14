@@ -9,7 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import Base, engine, get_db
+from app.core.database import Base, async_engine, get_db
 from app.models.climate import ClimateData
 from app.schemas.climate import ClimateDataResponse
 from app.routers import ingestion
@@ -21,8 +21,12 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Inicializa as tabelas de forma assíncrona se o banco de dados estiver acessível
+    try:
+        async with async_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as exc:
+        logging.warning("Aviso: Não foi possível conectar ao banco para create_all na inicialização: %s", exc)
 
     task = None
     if os.getenv("INGEST_ENABLED", "true").lower() == "true":
