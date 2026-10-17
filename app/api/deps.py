@@ -5,47 +5,76 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.user import User, UserRole
-from app.schemas.token import TokenPayload
-from app.services.user_service import get_user_by_id
+from app.models.user import PerfilUsuario, Usuario
+from app.schemas.token import PayloadToken
+from app.services.user_service import obter_usuario_por_id
 
-# Atualizado o tokenUrl para o novo caminho correto /auth/login
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+esquema_oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-async def get_current_user(db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)) -> User:
-    credentials_exception = HTTPException(
+# Mapeamento granular de permissões (escopos) para perfis de acesso (RBAC - RF08)
+MAPA_PERMISSOES_PERFIL: dict[str, list[PerfilUsuario]] = {
+    "dashboard:read": [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
+    "forecast:read": [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
+    "climate:read": [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
+    "forecast:write": [PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
+    "users:manage": [PerfilUsuario.ADMIN],
+}
+
+
+async def obter_usuario_atual(
+    db: AsyncSession = Depends(get_db),
+    token: str = Depends(esquema_oauth2),
+) -> Usuario:
+    excecao_credenciais = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Não foi possível validar as credenciais",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-        if user_id is None or token_type != "access":
-            raise credentials_exception
-        token_data = TokenPayload(sub=uuid.UUID(user_id), role=payload.get("role"), type=token_type)
+        id_usuario = payload.get("sub")
+        tipo_token = payload.get("type")
+        if id_usuario is None or tipo_token != "access":
+            raise excecao_credenciais
+        dados_token = PayloadToken(sub=uuid.UUID(id_usuario), perfil=payload.get("role"), tipo=tipo_token)
     except (JWTError, ValueError):
-        raise credentials_exception
+        raise excecao_credenciais
 
-    user = await get_user_by_id(db, token_data.sub)
-    if user is None:
-        raise credentials_exception
-    return user
+    usuario = await obter_usuario_por_id(db, dados_token.sub)
+    if usuario is None:
+        raise excecao_credenciais
+    return usuario
 
-async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
-    if not current_user.is_active:
+
+async def obter_usuario_ativo_atual(usuario_atual: Usuario = Depends(obter_usuario_atual)) -> Usuario:
+    if not usuario_atual.ativo:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuário inativo")
-    return current_user
+    return usuario_atual
 
-class RoleChecker:
-    def __init__(self, allowed_roles: list[UserRole]):
-        self.allowed_roles = allowed_roles
 
-    async def __call__(self, current_user: User = Depends(get_current_active_user)) -> User:
-        if current_user.role not in self.allowed_roles:
+class VerificadorPerfil:
+    def __init__(self, perfis_permitidos: list[PerfilUsuario]):
+        self.perfis_permitidos = perfis_permitidos
+
+    async def __call__(self, usuario_atual: Usuario = Depends(obter_usuario_ativo_atual)) -> Usuario:
+        if usuario_atual.perfil not in self.perfis_permitidos:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Você não tem permissão suficiente para esta operação",
             )
-        return current_user
+        return usuario_atual
+
+
+def exigir_permissao(permissao: str) -> VerificadorPerfil:
+    """Retorna uma instância de VerificadorPerfil mapeada a partir da permissão granular."""
+    perfis_permitidos = MAPA_PERMISSOES_PERFIL.get(permissao, [PerfilUsuario.ADMIN])
+    return VerificadorPerfil(perfis_permitidos)
+
+
+# Aliases para compatibilidade entre módulos
+oauth2_scheme = esquema_oauth2
+PERMISSION_ROLES_MAP = MAPA_PERMISSOES_PERFIL
+get_current_user = obter_usuario_atual
+get_current_active_user = obter_usuario_ativo_atual
+RoleChecker = VerificadorPerfil
+require_permission = exigir_permissao
