@@ -1,6 +1,6 @@
-# Dashboard de Monitoramento Climático e Logístico — Agronegócio (Vale do São Francisco)
+# Dashboard de Monitoramento Climático e de Safra — Agronegócio (Vale do São Francisco)
 
-Solução em nuvem para ingestão, processamento e análise preditiva de dados climáticos (IoT) e de mercado, voltada à otimização da janela de colheita e exportação de frutas na região de Petrolina/Juazeiro.
+Solução em nuvem para ingestão, processamento e análise preditiva de dados climáticos (IoT), voltada à otimização da janela ideal de colheita de frutas na região de Petrolina/Juazeiro.
 
 Projeto Integrador desenvolvido para o 4º módulo de Análise e Desenvolvimento de Sistemas (ADS).
 
@@ -11,10 +11,11 @@ Projeto Integrador desenvolvido para o 4º módulo de Análise e Desenvolvimento
 | Camada | Tecnologia |
 |---|---|
 | Linguagem | Python 3.10+ |
-| Framework web | FastAPI (Uvicorn) |
-| Banco de dados | PostgreSQL 15 (Docker) |
-| ORM | SQLAlchemy |
+| Framework web | FastAPI (Uvicorn) - Arquitetura Assíncrona |
+| Banco de dados | PostgreSQL 15 (Docker) via SQLAlchemy com asyncpg |
+| Autenticação | JWT Stateless com controle de acesso RBAC (Role-Based Access Control) |
 | IoT / Ingestão | ThingSpeak REST API / ESP32 |
+| Testes Automatizados | pytest com FastAPI TestClient |
 | Execução | Docker e Docker Compose |
 
 ---
@@ -23,8 +24,8 @@ Projeto Integrador desenvolvido para o 4º módulo de Análise e Desenvolvimento
 
 1. **Camada IoT:** o microcontrolador ESP32 coleta temperatura e umidade em intervalos regulares e publica no canal do ThingSpeak via HTTP/MQTT.
 2. **Camada de ingestão (back-end):** a API em FastAPI consome periodicamente os *channel feeds* do ThingSpeak, respeitando os limites da API REST pública.
-3. **Persistência:** os dados de telemetria climática e as cotações de mercado são higienizados e gravados no banco de dados relacional.
-4. **Camada analítica e de apresentação:** módulos de previsão geram alertas sobre a janela ideal de safra, disponíveis no dashboard operacional.
+3. **Persistência:** os dados de telemetria climática são higienizados e gravados no banco de dados relacional (`dados_climaticos`).
+4. **Camada analítica e de apresentação:** módulos de previsão geram alertas sobre a janela ideal de safra, disponíveis no dashboard operacional com controle de acesso por perfil de usuário.
 
 ---
 
@@ -63,12 +64,16 @@ pip install -r requirements.txt
 
 ### 4. Configurar as variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto com o modelo abaixo:
+Crie um arquivo `.env` na raiz do projeto baseado no `.env.example`:
 
 ```env
 DATABASE_URL=postgresql://admin:adminpassword@localhost:5432/agrotech_db
 THINGSPEAK_CHANNEL_ID=seu_channel_id_aqui
 THINGSPEAK_READ_KEY=sua_read_api_key_aqui
+SECRET_KEY=uma_chave_secreta_longa_e_aleatoria_aqui
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+INGEST_ENABLED=false
 ```
 
 ### 5. Subir o banco de dados
@@ -91,16 +96,36 @@ A API estará disponível em `http://localhost:8000`.
 
 ---
 
-## 📖 Documentação da API
+## 🧪 Execução de Testes Automatizados
 
-Com a aplicação em execução, a documentação interativa gerada automaticamente pelo OpenAPI pode ser acessada em:
+O projeto inclui suíte de testes com cobertura para endpoints públicos, autenticação e rotas do painel:
 
-- **Swagger UI:** <http://localhost:8000/docs>
-- **ReDoc:** <http://localhost:8000/redoc>
+```bash
+pytest -v
+```
 
 ---
 
-## 🔒 Segurança e Boas Práticas
+## 📖 Endpoints Principais da API
 
-- Credenciais sensíveis e chaves de acesso a serviços externos (como o ThingSpeak) **não** são versionadas; o arquivo `.env` deve permanecer no `.gitignore`.
-- A validação estrutural dos dados de entrada e as comunicações com o banco de dados seguem modelos Pydantic rigorosos.
+### 1. Autenticação (`/auth`)
+- `POST /auth/login`: Autentica usuário e retorna tokens JWT (`accessToken`, `refreshToken`) e dados do perfil.
+- `POST /auth/refresh`: Renova o token de acesso expirado.
+- `GET /auth/me`: Retorna os dados do usuário logado (requer autenticação).
+- `POST /auth/logout`: Rota de encerramento de sessão (HTTP 204).
+
+### 2. Painel e Monitoramento (`/api` ou raiz)
+- `GET /climate/readings?range=today`: Leituras reais da telemetria de sensores IoT (`today`, `24h`, `7d`, `30d`, `all`). Permissão: `climate:read`.
+- `GET /dashboard/summary`: Sumário executivo consolidado com KPIs do agronegócio. Permissão: `dashboard:read`.
+- `GET /forecasts/harvest?cropId=manga-palmer`: Previsão da janela ideal de colheita da safra. Permissão: `forecast:read`.
+- `GET /plots?status=ACTIVE`: Listagem de lotes/talhões produtivos monitorados em Petrolina/Juazeiro. Permissão: `dashboard:read`.
+- `GET /alerts/active`: Alerta térmico e climático em tempo real. Permissão: `autenticado`.
+
+---
+
+## 🔒 Segurança e Perfis de Acesso (RBAC)
+
+O sistema implementa autenticação stateless baseada em JSON Web Tokens (JWT) e controle por perfil de acesso:
+- **`PRODUTOR` (Produtor Rural):** Consulta o dashboard, previsões de safra, talhões e alertas.
+- **`ANALISTA` (Analista de Dados):** Visualiza e alimenta os modelos preditivos e históricos climáticos.
+- **`ADMIN` (Administrador):** Gerencia usuários, permissões e parametrizações globais do sistema.
