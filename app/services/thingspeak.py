@@ -1,96 +1,108 @@
 import os
-
-import httpx
-from dotenv import load_dotenv
 from datetime import datetime
 from typing import Optional
+import httpx
+from dotenv import load_dotenv
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.schemas.climate import ClimateDataCreate
-from app.models.climate import ClimateData
+from app.models.climate import DadosClimaticos
+from app.schemas.climate import DadosClimaticosCriar
 
 load_dotenv()
 
-BASE_URL = "https://api.thingspeak.com"
+URL_BASE = "https://api.thingspeak.com"
+FAIXA_TEMPERATURA = (-40.0, 100.0)
+FAIXA_UMIDADE = (0.0, 100.0)
 
 
-def fetch_feeds(results: int = 10) -> list[dict]:
-    """Fetches the latest readings from the ThingSpeak channel."""
-    channel_id = os.getenv("THINGSPEAK_CHANNEL_ID")
-    read_key = os.getenv("THINGSPEAK_READ_KEY")
-    if not channel_id or not read_key:
-        raise RuntimeError("THINGSPEAK_CHANNEL_ID and THINGSPEAK_READ_KEY must be set in .env")
+def buscar_leituras(quantidade: int = 10) -> list[dict]:
+    """Busca as últimas leituras do canal do ThingSpeak."""
+    id_canal = os.getenv("THINGSPEAK_CHANNEL_ID")
+    chave_leitura = os.getenv("THINGSPEAK_READ_KEY")
+    if not id_canal or not chave_leitura:
+        raise RuntimeError("THINGSPEAK_CHANNEL_ID e THINGSPEAK_READ_KEY devem estar configurados no .env")
 
-    response = httpx.get(
-        f"{BASE_URL}/channels/{channel_id}/feeds.json",
-        params={"api_key": read_key, "results": results},
+    resposta = httpx.get(
+        f"{URL_BASE}/channels/{id_canal}/feeds.json",
+        params={"api_key": chave_leitura, "results": quantidade},
         timeout=10.0,
     )
-    response.raise_for_status()
-    return response.json().get("feeds", [])
+    resposta.raise_for_status()
+    return resposta.json().get("feeds", [])
 
 
-TEMPERATURE_RANGE = (-40.0, 100.0)
-HUMIDITY_RANGE = (0.0, 100.0)
-
-
-def parse_feed(feed: dict) -> Optional[ClimateDataCreate]:
+def analisar_leitura(leitura_bruta: dict) -> Optional[DadosClimaticosCriar]:
     try:
-        entry_id = int(feed.get("entry_id"))
-        temperature = float(feed.get("field1"))
-        humidity = float(feed.get("field2"))
-        recorded_at = datetime.fromisoformat(feed.get("created_at").replace("Z", "+00:00"))
+        id_entrada = int(leitura_bruta.get("entry_id"))
+        temperatura = float(leitura_bruta.get("field1"))
+        umidade = float(leitura_bruta.get("field2"))
+        registrado_em = datetime.fromisoformat(leitura_bruta.get("created_at").replace("Z", "+00:00"))
     except (TypeError, ValueError, AttributeError):
         return None
 
-    if not (TEMPERATURE_RANGE[0] <= temperature <= TEMPERATURE_RANGE[1]):
+    if not (FAIXA_TEMPERATURA[0] <= temperatura <= FAIXA_TEMPERATURA[1]):
         return None
-    if not (HUMIDITY_RANGE[0] <= humidity <= HUMIDITY_RANGE[1]):
+    if not (FAIXA_UMIDADE[0] <= umidade <= FAIXA_UMIDADE[1]):
         return None
 
-    return ClimateDataCreate(
-        entry_id=entry_id,
-        temperature=temperature,
-        humidity=humidity,
-        recorded_at=recorded_at,
+    return DadosClimaticosCriar(
+        id_entrada=id_entrada,
+        temperatura=temperatura,
+        umidade=umidade,
+        registrado_em=registrado_em,
     )
 
 
-def save_new(db: Session, records: list[ClimateDataCreate]) -> tuple[int, int]:
-    if not records:
+def salvar_novas_leituras(db: Session, registros: list[DadosClimaticosCriar]) -> tuple[int, int]:
+    if not registros:
         return 0, 0
 
-    ids = [record.entry_id for record in records]
-    existing = set(
-        db.scalars(select(ClimateData.entry_id).where(ClimateData.entry_id.in_(ids)))
+    ids = [registro.id_entrada for registro in registros]
+    existentes = set(
+        db.scalars(select(DadosClimaticos.id_entrada).where(DadosClimaticos.id_entrada.in_(ids)))
     )
 
-    new_rows = [
-        ClimateData(
-            entry_id=record.entry_id,
-            temperature=record.temperature,
-            humidity=record.humidity,
-            recorded_at=record.recorded_at,
+    novas_linhas = [
+        DadosClimaticos(
+            id_entrada=registro.id_entrada,
+            temperatura=registro.temperatura,
+            umidade=registro.umidade,
+            registrado_em=registro.registrado_em,
         )
-        for record in records
-        if record.entry_id not in existing
+        for registro in registros
+        if registro.id_entrada not in existentes
     ]
 
-    db.add_all(new_rows)
+    db.add_all(novas_linhas)
     db.commit()
-    return len(new_rows), len(records) - len(new_rows)
+    return len(novas_linhas), len(registros) - len(novas_linhas)
 
 
-def process_feeds(db: Session, feeds: list[dict]) -> dict:
-    records = []
-    discarded = 0
-    for feed in feeds:
-        record = parse_feed(feed)
-        if record is None:
-            discarded += 1
+def processar_leituras(db: Session, leituras_brutas: list[dict]) -> dict:
+    registros = []
+    descartados = 0
+    for leitura in leituras_brutas:
+        registro = analisar_leitura(leitura)
+        if registro is None:
+            descartados += 1
         else:
-            records.append(record)
+            registros.append(registro)
 
-    saved, duplicates = save_new(db, records)
-    return {"fetched": len(feeds), "saved": saved, "duplicates": duplicates, "discarded": discarded}
+    salvos, duplicados = salvar_novas_leituras(db, registros)
+    return {
+        "fetched": len(leituras_brutas),
+        "saved": salvos,
+        "duplicates": duplicados,
+        "discarded": descartados,
+    }
+
+
+# Aliases para compatibilidade entre módulos
+BASE_URL = URL_BASE
+TEMPERATURE_RANGE = FAIXA_TEMPERATURA
+HUMIDITY_RANGE = FAIXA_UMIDADE
+fetch_feeds = buscar_leituras
+parse_feed = analisar_leitura
+save_new = salvar_novas_leituras
+process_feeds = processar_leituras

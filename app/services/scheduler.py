@@ -1,29 +1,33 @@
 import asyncio
 import logging
-
 import httpx
 
 from app.core.database import SessionLocal
-from app.services.thingspeak import fetch_feeds, process_feeds
+from app.services.thingspeak import buscar_leituras, processar_leituras
 
 logger = logging.getLogger(__name__)
 
 
-def _run_cycle() -> dict:
-    feeds = fetch_feeds(100)
+def _executar_ciclo() -> dict:
+    leituras = buscar_leituras(100)
     with SessionLocal() as db:
-        return process_feeds(db, feeds)
+        return processar_leituras(db, leituras)
 
 
-async def ingestion_loop(interval_seconds: int) -> None:
+async def loop_ingestao(intervalo_segundos: int) -> None:
     while True:
         try:
-            result = await asyncio.to_thread(_run_cycle)
-            logger.info("Ingestão automática concluída: %s", result)
+            resultado = await asyncio.to_thread(_executar_ciclo)
+            logger.info("Ingestão automática concluída: %s", resultado)
         except httpx.HTTPStatusError as exc:
             logger.error("O ThingSpeak retornou HTTP %s", exc.response.status_code)
         except httpx.HTTPError as exc:
             logger.error("Falha ao acessar o ThingSpeak: %s", type(exc).__name__)
         except Exception:
             logger.exception("Erro inesperado na ingestão automática")
-        await asyncio.sleep(interval_seconds)
+        await asyncio.sleep(intervalo_segundos)
+
+
+# Aliases para compatibilidade entre módulos
+_run_cycle = _executar_ciclo
+ingestion_loop = loop_ingestao
