@@ -3,14 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_sync_db
-from app.services.thingspeak import fetch_feeds, process_feeds
+from app.services.thingspeak import buscar_leituras, processar_leituras
 
 router = APIRouter(prefix="/api/ingestion", tags=["ingestion"])
 
 
-def _fetch_or_raise(results: int) -> list[dict]:
+def _buscar_ou_lancar_erro(quantidade: int) -> list[dict]:
     try:
-        return fetch_feeds(results)
+        return buscar_leituras(quantidade)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except httpx.HTTPStatusError as exc:
@@ -20,6 +20,6 @@ def _fetch_or_raise(results: int) -> list[dict]:
 
 
 @router.post("/run")
-def run_ingestion(results: int = Query(100, ge=1, le=100), db: Session = Depends(get_sync_db)):
-    feeds = _fetch_or_raise(results)
-    return process_feeds(db, feeds)
+def executar_ingestao(results: int = Query(100, ge=1, le=100), db: Session = Depends(get_sync_db)):
+    leituras = _buscar_ou_lancar_erro(results)
+    return processar_leituras(db, leituras)

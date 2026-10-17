@@ -3,90 +3,106 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RoleChecker, get_current_active_user
+from app.api.deps import VerificadorPerfil, obter_usuario_ativo_atual
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import create_access_token, create_refresh_token, get_password_hash, verify_password
-from app.models.user import User, UserRole
-from app.schemas.token import LoginRequest, RefreshTokenRequest, RefreshTokenResponse, TokenResponse
-from app.schemas.user import UserCreate, UserRead
-from app.services.user_service import get_user_by_email, get_user_by_id
+from app.core.security import criar_token_acesso, criar_token_atualizacao, gerar_hash_senha, verificar_senha
+from app.models.user import PerfilUsuario, Usuario
+from app.schemas.token import (
+    RequisicaoLogin,
+    RequisicaoRefreshToken,
+    RespostaRefreshToken,
+    RespostaToken,
+)
+from app.schemas.user import UsuarioCriar, UsuarioLeitura
+from app.services.user_service import obter_usuario_por_email, obter_usuario_por_id
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
-    user = await get_user_by_email(db, request.email)
-    if not user or not verify_password(request.password, user.hashed_password):
+
+@router.post("/login", response_model=RespostaToken)
+async def autenticar_usuario(requisicao: RequisicaoLogin, db: AsyncSession = Depends(get_db)):
+    usuario = await obter_usuario_por_email(db, requisicao.email)
+    if not usuario or not verificar_senha(requisicao.senha, usuario.senha_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email ou senha incorretos",
         )
-    if not user.is_active:
+    if not usuario.ativo:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuário inativo")
 
-    access_token = create_access_token(subject=user.id, role=user.role.value)
-    refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
-    
-    return TokenResponse(
-        accessToken=access_token,
-        refreshToken=refresh_token,
-        user=UserRead.model_validate(user)
+    token_acesso = criar_token_acesso(assunto=usuario.id, perfil=usuario.perfil.value)
+    token_atualizacao = criar_token_atualizacao(assunto=usuario.id, perfil=usuario.perfil.value)
+
+    return RespostaToken(
+        token_acesso=token_acesso,
+        token_atualizacao=token_atualizacao,
+        usuario=UsuarioLeitura.model_validate(usuario),
     )
 
-@router.post("/refresh", response_model=RefreshTokenResponse)
-async def refresh(request: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
-    credentials_exception = HTTPException(
+
+@router.post("/refresh", response_model=RespostaRefreshToken)
+async def atualizar_token(requisicao: RequisicaoRefreshToken, db: AsyncSession = Depends(get_db)):
+    excecao_credenciais = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token de atualização inválido ou expirado",
     )
     try:
-        payload = jwt.decode(request.refreshToken, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        token_type = payload.get("type")
-        if user_id is None or token_type != "refresh":
-            raise credentials_exception
+        payload = jwt.decode(
+            requisicao.token_atualizacao,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        id_usuario = payload.get("sub")
+        tipo_token = payload.get("type")
+        if id_usuario is None or tipo_token != "refresh":
+            raise excecao_credenciais
     except JWTError:
-        raise credentials_exception
+        raise excecao_credenciais
 
-    user = await get_user_by_id(db, uuid.UUID(user_id))
-    if not user or not user.is_active:
-        raise credentials_exception
+    usuario = await obter_usuario_por_id(db, uuid.UUID(id_usuario))
+    if not usuario or not usuario.ativo:
+        raise excecao_credenciais
 
-    access_token = create_access_token(subject=user.id, role=user.role.value)
-    refresh_token = create_refresh_token(subject=user.id, role=user.role.value)
+    token_acesso = criar_token_acesso(assunto=usuario.id, perfil=usuario.perfil.value)
+    token_atualizacao = criar_token_atualizacao(assunto=usuario.id, perfil=usuario.perfil.value)
 
-    return RefreshTokenResponse(
-        accessToken=access_token,
-        refreshToken=refresh_token
+    return RespostaRefreshToken(
+        token_acesso=token_acesso,
+        token_atualizacao=token_atualizacao,
     )
 
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(request: RefreshTokenRequest, current_user: User = Depends(get_current_active_user)):
-    # Apenas confirmamos a rota e o formato da requisição para seguir o contrato.
+async def encerrar_sessao(
+    requisicao: RequisicaoRefreshToken,
+    usuario_atual: Usuario = Depends(obter_usuario_ativo_atual),
+):
     return None
 
-@router.get("/me", response_model=UserRead)
-async def get_me(current_user: User = Depends(get_current_active_user)):
-    return current_user
+
+@router.get("/me", response_model=UsuarioLeitura)
+async def obter_perfil_logado(usuario_atual: Usuario = Depends(obter_usuario_ativo_atual)):
+    return usuario_atual
+
 
 @router.post(
     "/register",
-    response_model=UserRead,
+    response_model=UsuarioLeitura,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RoleChecker([UserRole.ADMIN]))],
+    dependencies=[Depends(VerificadorPerfil([PerfilUsuario.ADMIN]))],
 )
-async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
-    existing_user = await get_user_by_email(db, user_in.email)
-    if existing_user:
+async def cadastrar_usuario(dados_usuario: UsuarioCriar, db: AsyncSession = Depends(get_db)):
+    usuario_existente = await obter_usuario_por_email(db, dados_usuario.email)
+    if usuario_existente:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já cadastrado")
 
-    user = User(
-        email=user_in.email,
-        hashed_password=get_password_hash(user_in.password),
-        role=user_in.role,
+    novo_usuario = Usuario(
+        email=dados_usuario.email,
+        senha_hash=gerar_hash_senha(dados_usuario.senha),
+        perfil=dados_usuario.perfil,
     )
-    db.add(user)
+    db.add(novo_usuario)
     await db.commit()
-    await db.refresh(user)
-    return user
+    await db.refresh(novo_usuario)
+    return novo_usuario
