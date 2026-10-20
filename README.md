@@ -24,7 +24,7 @@ Projeto Integrador desenvolvido para o 4º módulo de Análise e Desenvolvimento
 
 1. **Camada IoT:** o microcontrolador ESP32 coleta temperatura e umidade em intervalos regulares e publica no canal do ThingSpeak via HTTP/MQTT.
 2. **Camada de ingestão (back-end):** a API em FastAPI consome periodicamente os *channel feeds* do ThingSpeak, respeitando os limites da API REST pública.
-3. **Persistência:** os dados de telemetria climática são higienizados e gravados no banco de dados relacional (`dados_climaticos`).
+3. **Persistência:** os dados de telemetria climática são higienizados e gravados no banco de dados relacional (`dados_climaticos`, `stations`, `usuarios`).
 4. **Camada analítica e de apresentação:** módulos de previsão geram alertas sobre a janela ideal de safra, disponíveis no dashboard operacional com controle de acesso por perfil de usuário.
 
 ---
@@ -98,7 +98,7 @@ A API estará disponível em `http://localhost:8000`.
 
 ## 🧪 Execução de Testes Automatizados
 
-O projeto inclui suíte de testes com cobertura para endpoints públicos, autenticação e rotas do painel:
+O projeto inclui suíte de testes com cobertura para endpoints públicos, autenticação, painel e CRUDs administrativos:
 
 ```bash
 pytest -v
@@ -121,11 +121,25 @@ pytest -v
 - `GET /plots?status=ACTIVE`: Listagem de lotes/talhões produtivos monitorados em Petrolina/Juazeiro. Permissão: `dashboard:read`.
 - `GET /alerts/active`: Alerta térmico e climático em tempo real. Permissão: `autenticado`.
 
+### 3. Sensores e Estações (`/api/stations`)
+- `GET /stations`: Listagem das estações meteorológicas/sensores. Permissão: `ANALISTA` ou `ADMIN`.
+- `GET /stations/health`: Status de saúde e latência da conectividade da rede IoT. Permissão: `ANALISTA` ou `ADMIN`.
+- `POST /stations`: Cadastro de nova estação física (CRUD real no banco). Permissão: `ADMIN`.
+- `PUT /stations/{id}`: Atualização de dados da estação. Permissão: `ADMIN`.
+- `DELETE /stations/{id}`: Remoção de estação. Permissão: `ADMIN`.
+
+### 4. Gestão de Usuários (`/api/users`)
+- `GET /users`: Listagem completa de usuários do sistema. Permissão: `ADMIN`.
+- `GET /users/stats`: Estatísticas consolidadas (total, ativos, inativos e distribuição por perfil). Permissão: `ADMIN`.
+- `POST /users`: Cadastro administrativo de usuário (retorna erro `409 Conflict` se email já existir). Permissão: `ADMIN`.
+- `PUT /users/{id}`: Edição de usuário, perfis e permissões. Permissão: `ADMIN`.
+- `DELETE /users/{id}`: Exclusão de usuário. Permissão: `ADMIN`.
+
 ---
 
 ## 🔒 Segurança e Perfis de Acesso (RBAC)
 
 O sistema implementa autenticação stateless baseada em JSON Web Tokens (JWT) e controle por perfil de acesso:
 - **`PRODUTOR` (Produtor Rural):** Consulta o dashboard, previsões de safra, talhões e alertas.
-- **`ANALISTA` (Analista de Dados):** Visualiza e alimenta os modelos preditivos e históricos climáticos.
-- **`ADMIN` (Administrador):** Gerencia usuários, permissões e parametrizações globais do sistema.
+- **`ANALISTA` (Analista de Dados):** Visualiza e alimenta os modelos preditivos, históricos climáticos e estações.
+- **`ADMIN` (Administrador):** Gerencia usuários, permissões, estações e parametrizações globais do sistema.
