@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import Base, async_engine, get_db
 from app.models.climate import DadosClimaticos
+from app.models.station import Station  # Garante registro no Base.metadata
+from app.models.user import Usuario    # Garante registro no Base.metadata
 from app.schemas.climate import DadosClimaticosResposta
-from app.routers import auth, dashboard, ingestion
+from app.routers import auth, dashboard, ingestion, stations, users
 from app.services.scheduler import loop_ingestao
 
 logging.basicConfig(level=logging.INFO)
@@ -39,16 +41,20 @@ async def ciclo_vida(app: FastAPI):
 
 app = FastAPI(
     title="Dashboard de Monitoramento Climático e Safra API",
-    description="API para ingestão e monitoramento climático e preditivo de colheita",
+    description="API para ingestão e monitoramento climático e administrativo",
     version="1.0.0",
     lifespan=ciclo_vida,
 )
 
-# Registro dos roteadores sob /api e também na raiz para compatibilidade total com o front-end
+# Registro dos roteadores sob /api e na raiz para compatibilidade com o front-end
 app.include_router(auth.router)
 app.include_router(auth.router, prefix="/api", include_in_schema=False)
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(dashboard.router, include_in_schema=False)
+app.include_router(stations.router, prefix="/api")
+app.include_router(stations.router, include_in_schema=False)
+app.include_router(users.router, prefix="/api")
+app.include_router(users.router, include_in_schema=False)
 app.include_router(ingestion.router)
 
 
