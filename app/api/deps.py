@@ -11,12 +11,22 @@ from app.services.user_service import obter_usuario_por_id
 
 esquema_oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Mapeamento granular de permissões (escopos) para perfis de acesso (RBAC - RF08)
+_TODOS_PERFIS = [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN]
+
+# Mapeamento granular de permissões (escopos) para perfis de acesso (RBAC - RF08).
+# Mantenha sincronizado com a matriz do front-end (barto-io/src/lib/rbac.ts).
 MAPA_PERMISSOES_PERFIL: dict[str, list[PerfilUsuario]] = {
-    "dashboard:read": [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
-    "forecast:read": [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
-    "climate:read": [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
+    "dashboard:read": _TODOS_PERFIS,
+    "forecast:read": _TODOS_PERFIS,
+    "climate:read": _TODOS_PERFIS,
+    "irrigation:read": _TODOS_PERFIS,
+    "reports:read": _TODOS_PERFIS,
+    "sensors:read": _TODOS_PERFIS,
+    "analytics:read": [PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
+    "users:read": [PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
     "forecast:write": [PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN],
+    "sensors:write": [PerfilUsuario.ADMIN],
+    "users:write": [PerfilUsuario.ADMIN],
     "users:manage": [PerfilUsuario.ADMIN],
 }
 

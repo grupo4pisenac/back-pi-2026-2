@@ -1,63 +1,64 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
-
-def _agora_utc() -> datetime:
-    return datetime.now(timezone.utc)
+Municipio = Literal["PETROLINA", "JUAZEIRO"]
+StatusEstacao = Literal["ATIVO", "ATENCAO", "INATIVO"]
+CulturaId = Literal["UVA_SUGRAONE", "MANGA_PALMER", "UVA_ARRA", "GOIABA_PALUMA"]
 
 
 class StationInput(BaseModel):
+    """Contrato StationInput do front-end."""
     model_config = ConfigDict(populate_by_name=True)
 
-    nome: str = Field(..., alias="name", description="Nome ou identificador da estação meteorológica/sensor")
-    localizacao: str = Field(..., alias="location", description="Localização física ou talhão de instalação")
-    status_ativo: bool = Field(default=True, alias="is_active", description="Indica se a estação está ativa")
+    id: str = Field(..., pattern=r"^ESP-[A-Z]{3}-\d{2}$", description="Identificador do dispositivo (ex.: ESP-PTR-04)")
+    nome: str = Field(..., min_length=3, alias="name", description="Nome da estação meteorológica")
+    municipio: Municipio = Field(..., alias="municipality")
+    produto_id: CulturaId = Field(..., alias="productId", description="Cultura associada à estação")
+    canal_thingspeak: str = Field(..., pattern=r"^\d{5,8}$", alias="thingSpeakChannelId")
 
-    @property
-    def name(self) -> str:
-        return self.nome
 
-    @property
-    def location(self) -> str:
-        return self.localizacao
+class PosicaoMapa(BaseModel):
+    """Coordenadas do pin no mapa SVG do front (0–100)."""
+    x: float
+    y: float
 
-    @property
-    def is_active(self) -> bool:
-        return self.status_ativo
+
+class LeituraEstacao(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    temperatura: float = Field(..., alias="temperature")
+    umidade_solo: Optional[float] = Field(None, alias="soilMoisture")
+    umidade_ar: float = Field(..., alias="airHumidity")
 
 
 class Station(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    """Contrato Station do front-end."""
+    model_config = ConfigDict(populate_by_name=True)
 
-    id: int
+    id: str
     nome: str = Field(..., alias="name")
-    localizacao: str = Field(..., alias="location")
-    status_ativo: bool = Field(..., alias="is_active")
-    created_at: datetime
-
-    @property
-    def name(self) -> str:
-        return self.nome
-
-    @property
-    def location(self) -> str:
-        return self.localizacao
-
-    @property
-    def is_active(self) -> bool:
-        return self.status_ativo
+    municipio: Municipio = Field(..., alias="municipality")
+    posicao: PosicaoMapa = Field(..., alias="position")
+    status: StatusEstacao
+    motivo_status: Optional[str] = Field(None, alias="statusReason")
+    bateria: int = Field(..., alias="battery")
+    ultima_leitura_em: Optional[datetime] = Field(None, alias="lastReadingAt")
+    ultima_leitura: Optional[LeituraEstacao] = Field(None, alias="lastReading")
+    produto_id: CulturaId = Field(..., alias="productId")
+    canal_thingspeak: str = Field(..., alias="thingSpeakChannelId")
 
 
 class NetworkHealth(BaseModel):
+    """Contrato NetworkHealth do front-end (online = active + attention)."""
     model_config = ConfigDict(populate_by_name=True)
 
-    status: str = Field(default="HEALTHY", description="Status da conectividade da rede de sensores")
-    total_stations: int = Field(default=0, alias="totalStations", description="Total de estações cadastradas")
-    active_stations: int = Field(default=0, alias="activeStations", description="Estações transmitindo ativamente")
-    inactive_stations: int = Field(default=0, alias="inactiveStations", description="Estações inativas ou sem sinal")
-    average_latency_ms: float = Field(default=45.2, alias="averageLatencyMs", description="Latência média dos pacotes (ms)")
-    packet_loss_rate: float = Field(default=0.008, alias="packetLossRate", description="Taxa de perda de pacotes")
-    last_sync: datetime = Field(default_factory=_agora_utc, alias="lastSync", description="Data/hora da última verificação")
+    total: int
+    online: int
+    ativas: int = Field(..., alias="active")
+    atencao: int = Field(..., alias="attention")
+    inativas: int = Field(..., alias="inactive")
+    ultima_sincronizacao: datetime = Field(..., alias="lastSyncAt")
 
 
 # Aliases em português

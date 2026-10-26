@@ -1,7 +1,10 @@
 import uuid
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from datetime import datetime
+from typing import Literal, Optional
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, computed_field
 from app.models.user import PerfilUsuario
+
+StatusUsuario = Literal["ATIVO", "INATIVO"]
 
 
 class UsuarioBase(BaseModel):
@@ -11,6 +14,7 @@ class UsuarioBase(BaseModel):
 
 
 class UsuarioCriar(UsuarioBase):
+    nome: str = Field(default="", alias="name")
     senha: str = Field(..., min_length=8, max_length=72, alias="password")
     perfil: PerfilUsuario = Field(default=PerfilUsuario.PRODUTOR, alias="role")
 
@@ -24,12 +28,17 @@ class UsuarioCriar(UsuarioBase):
 
 
 class UsuarioInput(UsuarioBase):
-    """Schema para criação e atualização de usuários."""
+    """Schema para criação e atualização de usuários (contrato UserInput do front-end)."""
     model_config = ConfigDict(populate_by_name=True)
 
+    nome: str = Field(..., min_length=1, alias="name")
     senha: Optional[str] = Field(None, min_length=8, max_length=72, alias="password")
     perfil: PerfilUsuario = Field(default=PerfilUsuario.PRODUTOR, alias="role")
-    ativo: bool = Field(default=True, alias="is_active")
+    status: StatusUsuario = Field(default="ATIVO")
+
+    @property
+    def ativo(self) -> bool:
+        return self.status == "ATIVO"
 
     @property
     def password(self) -> Optional[str]:
@@ -45,11 +54,20 @@ class UsuarioInput(UsuarioBase):
 
 
 class UsuarioLeitura(UsuarioBase):
+    """Contrato User do front-end."""
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: uuid.UUID
-    ativo: bool = Field(..., alias="is_active")
+    nome: str = Field(..., alias="name")
     perfil: PerfilUsuario = Field(..., alias="role")
+    ativo: bool = Field(..., exclude=True)
+    ultimo_acesso_em: Optional[datetime] = Field(None, alias="lastAccessAt")
+    criado_em: datetime = Field(..., alias="createdAt")
+
+    @computed_field
+    @property
+    def status(self) -> StatusUsuario:
+        return "ATIVO" if self.ativo else "INATIVO"
 
     @property
     def is_active(self) -> bool:
@@ -61,13 +79,13 @@ class UsuarioLeitura(UsuarioBase):
 
 
 class UsuarioEstatisticas(BaseModel):
-    """Estatísticas de usuários cadastrados no sistema."""
+    """Estatísticas de usuários cadastrados no sistema (contrato UsersStats do front-end)."""
     model_config = ConfigDict(populate_by_name=True)
 
-    total_users: int = Field(..., alias="totalUsers", description="Total de usuários cadastrados")
-    active_users: int = Field(..., alias="activeUsers", description="Total de usuários ativos")
-    inactive_users: int = Field(..., alias="inactiveUsers", description="Total de usuários inativos")
-    by_role: Optional[dict[str, int]] = Field(default=None, alias="byRole", description="Distribuição por perfil")
+    total: int = Field(..., description="Total de usuários cadastrados")
+    adicionados_mes: int = Field(..., alias="addedThisMonth", description="Usuários criados no mês corrente")
+    ativos: int = Field(..., alias="active", description="Total de usuários ativos")
+    administradores: int = Field(..., alias="admins", description="Total de administradores")
 
 
 # Aliases para compatibilidade entre módulos e nomenclatura solicitada

@@ -2,10 +2,11 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.deps import exigir_permissao
 from app.core.database import get_sync_db
-from app.services.thingspeak import buscar_leituras, processar_leituras
+from app.services.thingspeak import LIMITE_RESULTADOS, buscar_leituras, processar_leituras
 
-router = APIRouter(prefix="/api/ingestion", tags=["ingestion"])
+router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 
 def _buscar_ou_lancar_erro(quantidade: int) -> list[dict]:
@@ -19,7 +20,11 @@ def _buscar_ou_lancar_erro(quantidade: int) -> list[dict]:
         raise HTTPException(status_code=502, detail="Não foi possível acessar o ThingSpeak")
 
 
-@router.post("/run")
-def executar_ingestao(results: int = Query(100, ge=1, le=100), db: Session = Depends(get_sync_db)):
+@router.post("/run", dependencies=[Depends(exigir_permissao("sensors:write"))])
+def executar_ingestao(
+    results: int = Query(100, ge=1, le=LIMITE_RESULTADOS, description="Quantidade de leituras buscadas no canal"),
+    db: Session = Depends(get_sync_db),
+):
+    """Sincroniza manualmente o canal do ThingSpeak (Apenas Administrador)."""
     leituras = _buscar_ou_lancar_erro(results)
     return processar_leituras(db, leituras)

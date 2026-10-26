@@ -14,7 +14,9 @@ class DadosClimaticos(Base):
     id = Column(Integer, primary_key=True, index=True)
     id_entrada = Column(Integer, unique=True, index=True)
     temperatura = Column(Float, nullable=False)
-    umidade = Column(Float, nullable=False)
+    umidade = Column(Float, nullable=False)  # Umidade do ar (field2)
+    umidade_solo = Column(Float, nullable=True)  # Opcional (field3)
+    chuva = Column(Float, nullable=True)  # Opcional, mm (field4)
     registrado_em = Column(DateTime(timezone=True), nullable=False)  # Registro Sensor/ThingSpeak
     criado_em = Column(DateTime(timezone=True), default=_agora_utc)  # Registro da API
 
@@ -22,6 +24,8 @@ class DadosClimaticos(Base):
     entry_id = synonym("id_entrada")
     temperature = synonym("temperatura")
     humidity = synonym("umidade")
+    soil_moisture = synonym("umidade_solo")
+    rainfall = synonym("chuva")
     recorded_at = synonym("registrado_em")
     created_at = synonym("criado_em")
 
