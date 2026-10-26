@@ -14,6 +14,8 @@ load_dotenv()
 URL_BASE = "https://api.thingspeak.com"
 FAIXA_TEMPERATURA = (-40.0, 100.0)
 FAIXA_UMIDADE = (0.0, 100.0)
+# Máximo de leituras por chamada aceito pela API REST do ThingSpeak
+LIMITE_RESULTADOS = 8000
 
 
 def buscar_leituras(quantidade: int = 10) -> list[dict]:
@@ -25,8 +27,8 @@ def buscar_leituras(quantidade: int = 10) -> list[dict]:
 
     resposta = httpx.get(
         f"{URL_BASE}/channels/{id_canal}/feeds.json",
-        params={"api_key": chave_leitura, "results": quantidade},
-        timeout=10.0,
+        params={"api_key": chave_leitura, "results": min(quantidade, LIMITE_RESULTADOS)},
+        timeout=30.0,
     )
     resposta.raise_for_status()
     return resposta.json().get("feeds", [])
@@ -46,12 +48,29 @@ def analisar_leitura(leitura_bruta: dict) -> Optional[DadosClimaticosCriar]:
     if not (FAIXA_UMIDADE[0] <= umidade <= FAIXA_UMIDADE[1]):
         return None
 
+    # Campos opcionais: umidade do solo (field3) e chuva em mm (field4)
+    umidade_solo = _float_opcional(leitura_bruta.get("field3"))
+    if umidade_solo is not None and not (FAIXA_UMIDADE[0] <= umidade_solo <= FAIXA_UMIDADE[1]):
+        umidade_solo = None
+    chuva = _float_opcional(leitura_bruta.get("field4"))
+    if chuva is not None and chuva < 0:
+        chuva = None
+
     return DadosClimaticosCriar(
         id_entrada=id_entrada,
         temperatura=temperatura,
         umidade=umidade,
+        umidade_solo=umidade_solo,
+        chuva=chuva,
         registrado_em=registrado_em,
     )
+
+
+def _float_opcional(valor) -> Optional[float]:
+    try:
+        return float(valor) if valor not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
 
 
 def salvar_novas_leituras(db: Session, registros: list[DadosClimaticosCriar]) -> tuple[int, int]:
@@ -68,6 +87,8 @@ def salvar_novas_leituras(db: Session, registros: list[DadosClimaticosCriar]) ->
             id_entrada=registro.id_entrada,
             temperatura=registro.temperatura,
             umidade=registro.umidade,
+            umidade_solo=registro.umidade_solo,
+            chuva=registro.chuva,
             registrado_em=registro.registrado_em,
         )
         for registro in registros
