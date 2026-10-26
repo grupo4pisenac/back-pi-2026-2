@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,10 @@ async def autenticar_usuario(requisicao: RequisicaoLogin, db: AsyncSession = Dep
         )
     if not usuario.ativo:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Usuário inativo")
+
+    usuario.ultimo_acesso_em = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(usuario)
 
     token_acesso = criar_token_acesso(assunto=usuario.id, perfil=usuario.perfil.value)
     token_atualizacao = criar_token_atualizacao(assunto=usuario.id, perfil=usuario.perfil.value)
@@ -95,9 +100,10 @@ async def obter_perfil_logado(usuario_atual: Usuario = Depends(obter_usuario_ati
 async def cadastrar_usuario(dados_usuario: UsuarioCriar, db: AsyncSession = Depends(get_db)):
     usuario_existente = await obter_usuario_por_email(db, dados_usuario.email)
     if usuario_existente:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email já cadastrado")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email já cadastrado")
 
     novo_usuario = Usuario(
+        nome=dados_usuario.nome,
         email=dados_usuario.email,
         senha_hash=gerar_hash_senha(dados_usuario.senha),
         perfil=dados_usuario.perfil,
