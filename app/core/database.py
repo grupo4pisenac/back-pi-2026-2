@@ -1,3 +1,4 @@
+
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
@@ -6,33 +7,67 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 load_dotenv()
 
-RAW_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:adminpassword@localhost:5432/agrotech_db")
+RAW_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://admin:adminpassword@localhost:5432/agrotech_db"
+)
 
-# Garante URL síncrona para o engine síncrono (compatibilidade com scheduler e código legado)
-SYNC_DATABASE_URL = RAW_DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-
-# Garante URL assíncrona com asyncpg para o engine assíncrono
+# O projeto utiliza psycopg 3 para conexões síncronas
+SYNC_DATABASE_URL = RAW_DATABASE_URL.replace(
+    "postgresql+asyncpg://", "postgresql+psycopg://"
+)
 if SYNC_DATABASE_URL.startswith("postgresql://"):
-    ASYNC_DATABASE_URL = SYNC_DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
-else:
-    ASYNC_DATABASE_URL = SYNC_DATABASE_URL
+    SYNC_DATABASE_URL = SYNC_DATABASE_URL.replace(
+        "postgresql://", "postgresql+psycopg://", 1
+    )
 
-# Engine e Sessão Síncrona (usado pelo scheduler do ThingSpeak)
-engine = create_engine(SYNC_DATABASE_URL, echo=False)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# O projeto utiliza asyncpg para conexões assíncronas
+ASYNC_DATABASE_URL = RAW_DATABASE_URL.replace(
+    "postgresql+psycopg://", "postgresql+asyncpg://"
+)
+if ASYNC_DATABASE_URL.startswith("postgresql://"):
+    ASYNC_DATABASE_URL = ASYNC_DATABASE_URL.replace(
+        "postgresql://", "postgresql+asyncpg://", 1
+    )
 
-# Engine e Sessão Assíncrona (usado pelas rotas da API assíncrona)
-async_engine = create_async_engine(ASYNC_DATABASE_URL, echo=False)
-AsyncSessionLocal = async_sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
+# SSL ativado somente no ambiente Azure
+DB_SSL = os.getenv("DB_SSL", "false").lower() == "true"
+
+sync_connect_args = {"sslmode": "require"} if DB_SSL else {}
+async_connect_args = {"ssl": True} if DB_SSL else {}
+
+engine = create_engine(
+    SYNC_DATABASE_URL,
+    echo=False,
+    connect_args=sync_connect_args
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine
+)
+
+async_engine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    echo=False,
+    connect_args=async_connect_args
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=async_engine,
+    class_=AsyncSession,
+    expire_on_commit=False
+)
 
 Base = declarative_base()
 
-# Dependência assíncrona padrão para FastAPI
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
 
-# Dependência síncrona para rotas legadas
+
 def get_sync_db():
     db = SessionLocal()
     try:
