@@ -12,6 +12,10 @@ RAW_DATABASE_URL = os.getenv(
     "postgresql://admin:adminpassword@localhost:5432/agrotech_db"
 )
 
+print("DATABASE_URL existe:", bool(RAW_DATABASE_URL))
+print("DATABASE_URL começa com postgresql://:", RAW_DATABASE_URL.startswith("postgresql://"))
+print("DATABASE_URL tamanho:", len(RAW_DATABASE_URL))
+
 # O projeto utiliza psycopg 3 para conexões síncronas
 SYNC_DATABASE_URL = RAW_DATABASE_URL.replace(
     "postgresql+asyncpg://", "postgresql+psycopg://"
