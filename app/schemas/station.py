@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Municipio = Literal["PETROLINA", "JUAZEIRO"]
 StatusEstacao = Literal["ATIVO", "ATENCAO", "INATIVO"]
-CulturaId = Literal["UVA_SUGRAONE", "MANGA_PALMER", "UVA_ARRA", "GOIABA_PALUMA"]
+CulturaId = Literal["UVA_SUGRAONE", "MANGA_PALMER", "UVA_ARRA", "GOIABA_PALUMA", "UVA_MOSCATEL"]
 
 
 class StationInput(BaseModel):
