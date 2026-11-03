@@ -202,6 +202,13 @@ async def obter_previsao_colheita(id_cultura: str = "UVA_SUGRAONE", db: Optional
     mes_atual = agora_local.month - 1
     inicio_ano = agora_local.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
     medidas = await _temperatura_media_por_mes(db, inicio_ano) if db is not None else {}
+
+    if id_cultura not in PRODUCAO_MENSAL:
+        return PrevisaoColheita(
+            id_cultura=id_cultura,
+            pontos=[],
+        )
+
     return PrevisaoColheita(
         id_cultura=id_cultura,
         pontos=[
