@@ -10,9 +10,10 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -34,3 +35,17 @@ jobs:
           tags: |
             ghcr.io/grupo4pisenac/back-pi-2026-2:latest
             ghcr.io/grupo4pisenac/back-pi-2026-2:${{ github.sha }}
+
+      - name: Login to Azure using OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp update \
+            --name barto-api \
+            --resource-group rg-barto-prod \
+            --image ghcr.io/grupo4pisenac/back-pi-2026-2:${{ github.sha }}
