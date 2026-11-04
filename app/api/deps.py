@@ -1,6 +1,6 @@
 import uuid
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
@@ -9,7 +9,7 @@ from app.models.user import PerfilUsuario, Usuario
 from app.schemas.token import PayloadToken
 from app.services.user_service import obter_usuario_por_id
 
-esquema_oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/login")
+esquema_oauth2 = HTTPBearer()
 
 _TODOS_PERFIS = [PerfilUsuario.PRODUTOR, PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN]
 
@@ -33,7 +33,7 @@ MAPA_PERMISSOES_PERFIL: dict[str, list[PerfilUsuario]] = {
 
 async def obter_usuario_atual(
     db: AsyncSession = Depends(get_db),
-    token: str = Depends(esquema_oauth2),
+    token: HTTPAuthorizationCredentials = Depends(esquema_oauth2),
 ) -> Usuario:
     excecao_credenciais = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -41,7 +41,7 @@ async def obter_usuario_atual(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(token.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         id_usuario = payload.get("sub")
         tipo_token = payload.get("type")
         if id_usuario is None or tipo_token != "access":
