@@ -81,19 +81,10 @@ def executar_seed():
                 "Nenhum dado foi inserido."
             )
 
-        # Localiza a primeira leitura real
-        primeira_leitura = db.scalar(
-            select(func.min(DadosClimaticos.registrado_em))
+        # Último registro simulado será 15 minutos antes da execução
+        fim = datetime.now(timezone.utc) - timedelta(
+            minutes=INTERVALO_MINUTOS
         )
-
-        if primeira_leitura is None:
-            raise RuntimeError(
-                "Não existem leituras reais no banco. "
-                "Execute o seed somente depois da primeira leitura ThingSpeak."
-            )
-
-        # Último registro simulado será 15 minutos antes da primeira leitura real
-        fim = primeira_leitura - timedelta(minutes=INTERVALO_MINUTOS)
 
         # Início de um ano antes
         inicio = fim - timedelta(days=DIAS_HISTORICO) + timedelta(
@@ -122,8 +113,7 @@ def executar_seed():
         print(f"Seed concluído: {len(leituras)} registros inseridos.")
         print(f"Primeiro registro: {inicio.isoformat()}")
         print(f"Último registro: {fim.isoformat()}")
-        print(f"Primeira leitura real: {primeira_leitura.isoformat()}")
-
+        print(f"Referência da execução: {datetime.now(timezone.utc).isoformat()}")
 
 if __name__ == "__main__":
     executar_seed()
