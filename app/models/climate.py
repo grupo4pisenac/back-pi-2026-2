@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import (Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint)
 from sqlalchemy.orm import synonym
 from app.core.database import Base
 
@@ -10,9 +10,11 @@ def _agora_utc() -> datetime:
 
 class DadosClimaticos(Base):
     __tablename__ = "dados_climaticos"
+    __table_args__ = (
+    UniqueConstraint("station_id", "id_entrada", name="uq_dados_climaticos_station_entry"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    id_entrada = Column(Integer, unique=True, index=True)
+    id_entrada = Column(Integer, index=True)
     temperatura = Column(Float, nullable=False)
     umidade = Column(Float, nullable=False)  # Umidade do ar (field2)
     umidade_solo = Column(Float, nullable=True)  # Opcional (field3)
