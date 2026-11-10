@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Float, Integer
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import synonym
 from app.core.database import Base
 
@@ -19,6 +19,7 @@ class DadosClimaticos(Base):
     chuva = Column(Float, nullable=True)  # Opcional, mm (field4)
     registrado_em = Column(DateTime(timezone=True), nullable=False)  # Registro Sensor/ThingSpeak
     criado_em = Column(DateTime(timezone=True), default=_agora_utc)  # Registro da API
+    station_id = Column(String, ForeignKey("stations.id"), nullable=False, index=True)
 
     # Sinônimos para compatibilidade com contratos de API e queries legadas
     entry_id = synonym("id_entrada")
