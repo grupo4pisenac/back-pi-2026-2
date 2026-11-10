@@ -55,13 +55,33 @@ async def _id_estacao_ingestao(db: AsyncSession) -> str:
     return settings.THINGSPEAK_CHANNEL_ID or "THINGSPEAK"
 
 
-async def _consultar_dados(db: AsyncSession, desde: Optional[datetime], ate: Optional[datetime] = None) -> List[DadosClimaticos]:
+async def _consultar_dados(
+    db: AsyncSession,
+    desde: Optional[datetime],
+    ate: Optional[datetime] = None,
+    id_estacao: Optional[str] = None,
+) -> List[DadosClimaticos]:
     consulta = select(DadosClimaticos)
+
+    if id_estacao is not None:
+        consulta = consulta.where(
+            DadosClimaticos.station_id == id_estacao
+        )
+
     if desde is not None:
-        consulta = consulta.where(DadosClimaticos.registrado_em >= desde)
+        consulta = consulta.where(
+            DadosClimaticos.registrado_em >= desde
+        )
+
     if ate is not None:
-        consulta = consulta.where(DadosClimaticos.registrado_em <= ate)
-    resultado = await db.execute(consulta.order_by(DadosClimaticos.registrado_em.asc()))
+        consulta = consulta.where(
+            DadosClimaticos.registrado_em <= ate
+        )
+
+    resultado = await db.execute(
+        consulta.order_by(DadosClimaticos.registrado_em.asc())
+    )
+
     return list(resultado.scalars().all())
 
 
