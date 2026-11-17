@@ -75,7 +75,7 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 INGEST_ENABLED=true
 INGEST_INTERVAL_SECONDS=20
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,https://front-pi-2026-2-frmjlecdz-vitorrsantoss.vercel.app
 ```
 
 ### 5. Subir o banco de dados
@@ -135,7 +135,13 @@ Contratos seguidos pela API:
 - **Erros padronizados** no formato `{ "message": "...", "detail": ... }`. O front exibe `message`.
 - **Datas em ISO 8601 com fuso** (UTC).
 - **Enums em maiúsculo**: `ADMIN | ANALISTA_DADOS | PRODUTOR_EXPORTADOR`, `ATIVO | INATIVO`, `ATIVO | ATENCAO | INATIVO`.
-- **CORS** liberado para as origens de `CORS_ORIGINS`, para acesso direto sem o proxy.
+- **CORS** liberado para as origens de `CORS_ORIGINS` e para os endereços que casam com `CORS_ORIGIN_REGEX`, para acesso direto sem o proxy.
+
+### Front-end hospedado na Vercel
+
+O front-end publicado (`front-pi-2026-2` na Vercel) chama esta API publicada no Azure Container Apps. A Vercel cria um endereço novo a cada deploy (`front-pi-2026-2-<hash>-vitorrsantoss.vercel.app`). Por isso, além do endereço atual em `CORS_ORIGINS`, o `CORS_ORIGIN_REGEX` libera todos os deploys, previews e o domínio de produção desse projeto. Domínios de terceiros continuam bloqueados.
+
+No Azure, as variáveis valem no **ambiente do Container App** e não no `.env`. Se `CORS_ORIGINS` estiver definida lá, atualize o valor ou remova a variável para valer o padrão do código. Depois de mudar o código, faça um novo deploy da imagem.
 
 ### Origem dos dados
 
