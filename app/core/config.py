@@ -16,6 +16,20 @@ class Settings(BaseSettings):
     # expressão libera todos os deploys, previews e o domínio de produção do projeto do time.
     CORS_ORIGIN_REGEX: str = r"^https://front-pi-2026-2(-[a-z0-9-]+)?-vitorrsantoss\.vercel\.app$|^https://front-pi-2026-2\.vercel\.app$"
 
+    # Configuração de envio de e-mail (recuperação de senha)
+    MAIL_BACKEND: str = "console"  # "console" (dev) ou "smtp" (produção/Gmail)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    MAIL_FROM: str = ""
+    FRONTEND_RESET_URL: str = "http://localhost:5173/reset-password"
+
+    # Rate limit em memória para /auth/forgot-password (desligável em testes)
+    RATE_LIMIT_ENABLED: bool = True
+    FORGOT_PASSWORD_RATE_LIMIT_MAX_REQUESTS: int = 5
+    FORGOT_PASSWORD_RATE_LIMIT_WINDOW_SECONDS: int = 900
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
