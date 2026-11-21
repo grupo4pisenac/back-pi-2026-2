@@ -195,6 +195,9 @@ Todas as rotas abaixo respondem sob `/api` (usado pelo front-end) e também na r
 - `POST /auth/refresh`: recebe `{ refreshToken }` e retorna `{ accessToken, refreshToken }`.
 - `GET /auth/me`: retorna o `User` logado (requer autenticação).
 - `POST /auth/logout`: recebe `{ refreshToken }` e responde `204`.
+- `POST /auth/forgot-password`: recebe `{ email }` e responde sempre `200` com mensagem genérica (com rate limit em memória controlável por `RATE_LIMIT_ENABLED`); quando o usuário existe e está ativo, gera um código numérico de 6 dígitos válido por 15 min (salvo em SHA-256) e envia em background (`MAIL_BACKEND=console` imprime no terminal; `smtp` envia via Gmail).
+- `POST /auth/verify-reset-code`: recebe `{ email, code }` e valida o código de 6 dígitos sem consumi-lo (`400` genérico se inválido/expirado/bloqueado; limite de 5 tentativas erradas).
+- `POST /auth/reset-password`: recebe `{ email, code, new_password }`, consome o código atomicamente e atualiza a senha (`400` genérico se inválido/expirado/usado). *Nota:* como a autenticação é JWT stateless (sem tabela de sessões), JWTs emitidos antes do reset seguem válidos até expirarem naturalmente.
 
 ### 2. Painel e Monitoramento
 - `GET /climate/readings?range=today`: `ClimateReading[]` em ordem cronológica. Aceita `range` (`today` começa à meia-noite do Vale, UTC−3; `24h`, `7d`, `30d`, `all`) ou `from`/`to` (ISO 8601), além de `stationId` e `maxPoints` (2–2000, reduz a série por média em janelas). `soilMoisture` e `rainfall` vêm `null` quando o canal não publica esses campos. Permissão: `climate:read`.
