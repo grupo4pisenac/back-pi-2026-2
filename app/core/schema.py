@@ -22,6 +22,9 @@ COLUNAS_NOVAS: dict[str, dict[str, str]] = {
         "umidade_solo": "DOUBLE PRECISION",
         "chuva": "DOUBLE PRECISION",
     },
+    "password_reset_tokens": {
+        "attempts": "INTEGER NOT NULL DEFAULT 0",
+    },
 }
 
 

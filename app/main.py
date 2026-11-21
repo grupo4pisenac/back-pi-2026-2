@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.database import Base, async_engine, get_db
 from app.core.schema import atualizar_schema
 from app.models.climate import DadosClimaticos
+from app.models.password_reset import PasswordResetToken  # Garante registro no Base.metadata
 from app.models.station import Station  # Garante registro no Base.metadata
 from app.models.user import Usuario    # Garante registro no Base.metadata
 from app.schemas.climate import DadosClimaticosResposta
