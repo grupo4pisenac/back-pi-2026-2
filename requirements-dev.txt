@@ -1,0 +1,2 @@
+# Dependências exclusivas de desenvolvimento e testes (não usadas em produção)
+aiosqlite>=0.20.0
