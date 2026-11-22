@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from statistics import mean
 from typing import List, Optional
@@ -7,6 +8,7 @@ from sqlalchemy.future import select
 
 from app.core.config import settings
 from app.models.climate import DadosClimaticos
+from app.models.forecast import ParametroPrevisao
 from app.models.station import Station
 from app.schemas.climate import AgregadoClimatico, EstatisticaSerie, LeituraClimatica
 from app.schemas.dashboard import (
@@ -16,7 +18,7 @@ from app.schemas.dashboard import (
     ResumoPainel,
     Talhao,
 )
-
+logger = logging.getLogger(__name__)
 # Limiares do alerta térmico (°C)
 LIMIAR_ATENCAO_C = 35.0
 LIMIAR_CRITICO_C = 38.0
@@ -213,28 +215,40 @@ async def _temperatura_media_por_mes(db: AsyncSession, inicio_ano: datetime) -> 
     return {int(mes): round(float(media), 1) for mes, media in resultado.all() if media is not None}
 
 
+async def _producao_mensal(db: Optional[AsyncSession], id_cultura: str) -> Optional[List[float]]:
+    """Produção mensal salva no banco para a cultura; sem registro válido, usa o padrão de PRODUCAO_MENSAL."""
+    padrao = PRODUCAO_MENSAL.get(id_cultura)
+    if db is None or padrao is None:
+        return padrao
+    linha = await db.get(ParametroPrevisao, id_cultura)
+    valores = getattr(linha, "producao_mensal", None) if linha is not None else None
+    if isinstance(valores, list) and len(valores) == 12:
+        return [float(v) for v in valores]
+    return padrao
+
+
 async def obter_previsao_colheita(id_cultura: str = "UVA_SUGRAONE", db: Optional[AsyncSession] = None) -> PrevisaoColheita:
     """
     Série mensal de produção e temperatura da cultura; meses após o atual são projetados (RF06).
+    A produção vem dos parâmetros editáveis (forecast:write) ou, sem edição, dos valores padrão.
     A temperatura climatológica de referência vem acompanhada da média real medida pela estação.
     """
     agora_local = datetime.now(timezone.utc).astimezone(FUSO_LOCAL)
     mes_atual = agora_local.month - 1
     inicio_ano = agora_local.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-    medidas = await _temperatura_media_por_mes(db, inicio_ano) if db is not None else {}
 
-    if id_cultura not in PRODUCAO_MENSAL:
-        return PrevisaoColheita(
-            id_cultura=id_cultura,
-            pontos=[],
-        )
+    producao = await _producao_mensal(db, id_cultura)
+    if producao is None:
+        return PrevisaoColheita(id_cultura=id_cultura, pontos=[])
+
+    medidas = await _temperatura_media_por_mes(db, inicio_ano) if db is not None else {}
 
     return PrevisaoColheita(
         id_cultura=id_cultura,
         pontos=[
             PontoPrevisaoColheita(
                 periodo=periodo,
-                producao_t=PRODUCAO_MENSAL[id_cultura][i],
+                producao_t=producao[i],
                 temperatura_media_c=TEMPERATURAS_MENSAIS[i],
                 temperatura_medida_c=medidas.get(i + 1) if i <= mes_atual else None,
                 projetado=i > mes_atual,
@@ -242,6 +256,22 @@ async def obter_previsao_colheita(id_cultura: str = "UVA_SUGRAONE", db: Optional
             for i, periodo in enumerate(MESES)
         ],
     )
+
+
+async def atualizar_previsao_colheita(
+    db: AsyncSession, id_cultura: str, producao_mensal: List[float], email_autor: str
+) -> PrevisaoColheita:
+    """Grava a produção mensal da cultura (cria o registro na primeira edição) e devolve a previsão atualizada."""
+    linha = await db.get(ParametroPrevisao, id_cultura)
+    if linha is None:
+        linha = ParametroPrevisao(id_cultura=id_cultura)
+        db.add(linha)
+    linha.producao_mensal = list(producao_mensal)
+    linha.atualizado_por = email_autor
+    linha.atualizado_em = datetime.now(timezone.utc)
+    await db.commit()
+    logger.info("Parâmetros de previsão de %s alterados por %s", id_cultura, email_autor)
+    return await obter_previsao_colheita(id_cultura=id_cultura, db=db)
 
 
 # Intervalo máximo atribuído a uma leitura; acima disso considera-se falha de transmissão
