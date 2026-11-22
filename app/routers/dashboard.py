@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Literal, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import exigir_permissao, obter_usuario_ativo_atual
@@ -9,6 +9,7 @@ from app.models.user import Usuario
 from app.schemas.climate import AgregadoClimatico
 from app.schemas.dashboard import (
     AlertaTermico,
+    AtualizacaoPrevisaoColheita,
     LeituraClimatica,
     PrevisaoColheita,
     ResumoPainel,
@@ -16,6 +17,8 @@ from app.schemas.dashboard import (
 )
 from app.schemas.station import CulturaId
 from app.services.dashboard_service import (
+    PRODUCAO_MENSAL,
+    atualizar_previsao_colheita,
     obter_agregados_climaticos,
     obter_alerta_termico_ativo,
     obter_leituras_climaticas,
@@ -87,7 +90,26 @@ async def consultar_previsao_colheita(
     """Retorna a série de produção e temperatura (referência e medida) da cultura informada."""
     return await obter_previsao_colheita(id_cultura=cropId, db=db)
 
-
+@router.put(
+    "/forecasts/harvest/{cropId}",
+    response_model=PrevisaoColheita,
+)
+async def editar_previsao_colheita(
+    dados: AtualizacaoPrevisaoColheita,
+    cropId: CulturaId = Path(..., description="Cultura: UVA_SUGRAONE, MANGA_PALMER, UVA_ARRA, GOIABA_PALUMA"),
+    usuario_atual: Usuario = Depends(exigir_permissao("forecast:write")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Atualiza a produção mensal da cultura. Exclusivo de ANALISTA_DADOS e ADMIN (forecast:write)."""
+    if cropId not in PRODUCAO_MENSAL:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cultura sem previsão de colheita")
+    return await atualizar_previsao_colheita(
+        db=db,
+        id_cultura=cropId,
+        producao_mensal=dados.producao_mensal_t,
+        email_autor=usuario_atual.email,
+    )
+    
 @router.get(
     "/plots",
     response_model=List[Talhao],
