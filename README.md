@@ -139,9 +139,9 @@ Contratos seguidos pela API:
 
 ### Front-end hospedado na Vercel
 
-O front-end publicado (`front-pi-2026-2` na Vercel) chama esta API publicada no Azure Container Apps. A Vercel cria um endereço novo a cada deploy (`front-pi-2026-2-<hash>-vitorrsantoss.vercel.app`). Por isso, além do endereço atual em `CORS_ORIGINS`, o `CORS_ORIGIN_REGEX` libera todos os deploys, previews e o domínio de produção desse projeto. Domínios de terceiros continuam bloqueados.
+O front-end publicado (`front-pi-2026-2` na Vercel) chama esta API publicada no Render (`https://barto-api.onrender.com`). A Vercel cria um endereço novo a cada deploy (`front-pi-2026-2-<hash>-vitorrsantoss.vercel.app`). Por isso, além do endereço atual em `CORS_ORIGINS`, o `CORS_ORIGIN_REGEX` libera todos os deploys, previews e o domínio de produção desse projeto. Domínios de terceiros continuam bloqueados.
 
-No Azure, as variáveis valem no **ambiente do Container App** e não no `.env`. Se `CORS_ORIGINS` estiver definida lá, atualize o valor ou remova a variável para valer o padrão do código. Depois de mudar o código, faça um novo deploy da imagem.
+No Render, as variáveis valem na aba **Environment** do serviço, e não no `.env`. Se `CORS_ORIGINS` estiver definida lá, atualize o valor ou remova a variável para valer o padrão do código. Com o Auto-Deploy ligado, o Render publica sozinho a cada push na `main`; para publicar manualmente, use **Manual Deploy → Deploy latest commit**.
 
 ### Origem dos dados
 
