@@ -238,6 +238,51 @@ def test_previsao_traz_temperatura_medida_nos_meses_com_leitura(cliente):
     app.dependency_overrides[obter_usuario_ativo_atual] = lambda: _usuario(PerfilUsuario.PRODUTOR)
     app.dependency_overrides[get_db] = sobrescrever_db
 
+    # ---------- Edição dos parâmetros de previsão (forecast:write) ----------
+
+PRODUCAO_EDITADA = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 110.0, 120.0]
+
+
+def _sobrescrever_db_vazio():
+    async def sobrescrever_db():
+        yield _sessao_com_leituras([])
+
+    return sobrescrever_db
+
+
+def test_produtor_nao_edita_previsao(cliente):
+    app.dependency_overrides[obter_usuario_ativo_atual] = lambda: _usuario(PerfilUsuario.PRODUTOR)
+    app.dependency_overrides[get_db] = _sobrescrever_db_vazio()
+    resposta = cliente.put("/api/forecasts/harvest/UVA_SUGRAONE", json={"monthlyProductionT": PRODUCAO_EDITADA})
+    assert resposta.status_code == 403
+
+
+@pytest.mark.parametrize("perfil", [PerfilUsuario.ANALISTA, PerfilUsuario.ADMIN])
+def test_analista_e_admin_editam_previsao(cliente, perfil):
+    app.dependency_overrides[obter_usuario_ativo_atual] = lambda: _usuario(perfil)
+    app.dependency_overrides[get_db] = _sobrescrever_db_vazio()
+    resposta = cliente.put("/api/forecasts/harvest/UVA_SUGRAONE", json={"monthlyProductionT": PRODUCAO_EDITADA})
+    assert resposta.status_code == 200
+    corpo = resposta.json()
+    assert corpo["cropId"] == "UVA_SUGRAONE"
+    assert [p["productionT"] for p in corpo["points"]] == PRODUCAO_EDITADA
+
+
+def test_edicao_previsao_valida_entrada(cliente):
+    app.dependency_overrides[obter_usuario_ativo_atual] = lambda: _usuario(PerfilUsuario.ANALISTA)
+    app.dependency_overrides[get_db] = _sobrescrever_db_vazio()
+    url = "/api/forecasts/harvest/UVA_SUGRAONE"
+    assert cliente.put(url, json={"monthlyProductionT": PRODUCAO_EDITADA[:11]}).status_code == 422
+    assert cliente.put(url, json={"monthlyProductionT": [-1.0] + PRODUCAO_EDITADA[1:]}).status_code == 422
+    assert cliente.put("/api/forecasts/harvest/invalida", json={"monthlyProductionT": PRODUCAO_EDITADA}).status_code == 422
+    # Cultura válida, mas sem série de previsão
+    assert cliente.put("/api/forecasts/harvest/UVA_MOSCATEL", json={"monthlyProductionT": PRODUCAO_EDITADA}).status_code == 404
+
+
+def test_edicao_previsao_exige_login(cliente):
+    resposta = cliente.put("/api/forecasts/harvest/UVA_SUGRAONE", json={"monthlyProductionT": PRODUCAO_EDITADA})
+    assert resposta.status_code == 401
+
     pontos = cliente.get("/api/forecasts/harvest?cropId=UVA_ARRA").json()["points"]
     assert pontos[0]["measuredTemperatureC"] == 29.4
     # Mês futuro (projetado) nunca traz valor medido
