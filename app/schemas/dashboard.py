@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.climate import ClimateReading, LeituraClimatica
 from app.schemas.station import CulturaId
 
@@ -37,6 +37,25 @@ class PrevisaoColheita(BaseModel):
     id_cultura: CulturaId = Field(..., alias="cropId")
     pontos: List[PontoPrevisaoColheita] = Field(default_factory=list, alias="points")
 
+class AtualizacaoPrevisaoColheita(BaseModel):
+    """Corpo do PUT /forecasts/harvest/{cropId}: produção mensal de Jan a Dez (t)."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    producao_mensal_t: List[float] = Field(
+        ...,
+        alias="monthlyProductionT",
+        min_length=12,
+        max_length=12,
+        description="12 valores (Jan..Dez), em toneladas, entre 0 e 100000",
+    )
+
+    @field_validator("producao_mensal_t")
+    @classmethod
+    def validar_faixa(cls, valores: List[float]) -> List[float]:
+        for valor in valores:
+            if not 0 <= valor <= 100_000:
+                raise ValueError("Cada valor de produção deve estar entre 0 e 100000 t")
+        return [round(v, 1) for v in valores]
 
 class Talhao(BaseModel):
     """Contrato Plot do front-end."""
